@@ -98,6 +98,3 @@ class CommandInterpreter(cmd.Cmd):
         return True
     # do_EOF()
 # CommandInterpreter()
-
-if __name__ == '__main__':
-    CommandInterpreter().cmdloop()

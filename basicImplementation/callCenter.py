@@ -222,6 +222,8 @@ class CallCenter():
         """
         Stop all the threads in self.operatorsThread
         """
+        for op in self.operators.values():
+            op.setStatus(operatorCall.AVAILABLE)
         for opThread in self.operatorsThread.values():
             opThread.stopThread()
     # stopProgram()

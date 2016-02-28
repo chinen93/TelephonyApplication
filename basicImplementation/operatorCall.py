@@ -9,7 +9,6 @@ import time
 AVAILABLE = 0
 RINGING   = 1
 BUSY      = 2
-class TimeoutError(Exception): pass
 #
 # CODE
 #
@@ -152,7 +151,6 @@ class OperatorThread(threading.Thread):
         I will constantly check if the operator changed his status to
         ringing. Once he do i will start a timeout for this status
         """
-        print('I am alive [' + self.operator.ID + '] thread')
         while self.runThread:
             if self.operator.status == RINGING and self.timeout != -1:
                 time.sleep(self.timeout)    
