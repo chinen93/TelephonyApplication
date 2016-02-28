@@ -1,9 +1,8 @@
 #
 # IMPORTS
 #
-import cmd
 import operatorCall
-import sys
+
 #
 # CONSTANTS AND DEFINITIONS
 #
@@ -11,7 +10,7 @@ import sys
 #
 # CODE
 #
-class CallCenter(cmd.Cmd):
+class CallCenter():
     """
     I am responsible for handling the Call Center's commands
     """
@@ -25,16 +24,27 @@ class CallCenter(cmd.Cmd):
 
         # Create lists to store Operators and Calls
         self.operators = {}
+        self.operatorsThread = {}
         self.waitingQueue = []
         
         # Create some operators
-        self.operators['A'] = operatorCall.OperatorCall('A')
-        self.operators['B'] = operatorCall.OperatorCall('B')
-
-        # initialize the parent class
-        super(CallCenter, self).__init__() 
+        
+        self.createCallOperator('A')
+        self.createCallOperator('B')
     # __init__()
 
+    def createCallOperator(self, opID):
+        """
+        Create the operator and start a Thread for it.
+
+        The thread will be responsible for the timeout
+        """
+        operator = operatorCall.OperatorCall(opID)
+        self.operators[opID] = operator
+        opThread = operatorCall.OperatorThread(operator)
+        opThread.start()
+        self.operatorsThread[opID] = opThread
+    
     def findOperator(self, operatorID):
         """
         I find  in the dictionary of operators.
@@ -74,47 +84,55 @@ class CallCenter(cmd.Cmd):
         return callID
     # nextCall
 
-    def deliverNextCall(self, operator):
+    def deliverCall(self, callID=-1):
         """
         I delivery the next call in the waiting queue to an operator
       
-        :param operator: operator who will receive the call
-        :type  operator: operatorCall.OperatorCall
+        :param callID: call identification
+        :type  callID: int
 
-        :return : nothing
-        :rtype  : none
+        :return : True if delivered, False otherwise
+        :rtype  : boolean
         """
-        callID = self.nextCallID()
 
-        # There is no waiting call
+        # get the next call from the waiting queue
         if callID == -1:
-            operator.setStatus(operatorCall.AVAILABLE)
-            return
+            waitingID = self.nextCallID()
+            # There is no waiting call
+            if waitingID == -1:
+                return True
+            else:
+                callID = waitingID
 
-        operator.setStatus(operatorCall.RINGING, callID)
-        print('Call ' + str(callID) +
-              ' ringing for operator '+ operator.ID)
-    # deliveryNextCall()
-    
-    # TODO: remove this parameterUnesed, but
-    # fires 'takes 1 positional arguments but 2 were given'
-    def do_test(self, paramUnused):
-        """
-        I print the status of the Call Center in the moment
-        """
+        # search for an available operator sorted by IDs
+        for op in sorted(self.operators.values(),
+                         key=lambda operator: operator.ID):
+            if not op.hasCall():
+                 op.setStatus(operatorCall.RINGING, callID)
+                 print('Call ' + str(callID) +
+                       ' ringing for operator '+ op.ID)
+                 self.operatorsThread[op.ID].startTimeout()
+                 return True
+
+        return False
+    # deliveryCall()
+
+    def showStatus(self):
+        print('=======================')
         print('Number of Operators: ' + str(self.operators.__len__()))
         for op in self.operators.values():
             print('Operator: ' + op.ID + 
                   '; Status: ' + op.getStatus() +
                   '; Call : ' + str(op.callID))
+        print('=============')
         print('Number of Waiting Calls: ' + str(self.waitingQueue.__len__()))
         for callID in self.waitingQueue:
-            print('Call: ' + callID)
-    # do_test()
-            
-    def do_call(self, callID):
+            print('Call: ' + str(callID))
+        print('=============')
+    # showStatus()
+
+    def createCall(self, callID):
         """
-        I deal with the call command. 
         If there is an operator available the call is passed to him, 
         otherwise the call is placed in the waiting queue
 
@@ -124,94 +142,87 @@ class CallCenter(cmd.Cmd):
         :return: nothing
         :rtype : none
         """
-
-        # log message
         print('Call ' + str(callID) + ' received')
-
-        waiting = True
-        # find an operator to deliver the call
-        for op in self.operators.values():
-            if op.status == operatorCall.AVAILABLE and waiting == True:
-                op.setStatus(operatorCall.RINGING, callID)
-                print('Call ' + str(op.callID) +
-                      ' ringing for operator '+ op.ID)
-                waiting = False
-
+        delivered = self.deliverCall(callID)
+        
         # put the call in the waiting queue
-        if waiting:
+        if not delivered:
             self.waitingQueue.append(callID)
             print('Call ' + str(callID) + ' waiting in queue')
-    # do_call()
+    # createCall()
 
-    
-    def do_answer(self, operatorID):
+    def answerCall(self, operatorID):
         """
-        I deal with the answer command.
         Find the operator and make him answer a call
-
+        
         :param operatorID: operator identification
         :type  operatorID: string
 
         :return: nothing
         :rtype : none
         """
-
         op = self.findOperator(operatorID)
         if op is None:
             return 
 
-        if op.isRinging():
-            op.setStatus(operatorCall.BUSY, op.callID)
-            print('Call ' + str(op.callID) +
-                  ' answered by operator ' + str(op.ID))
-    # do_answer()
+        if op.hasCall():
+            op.answer()
+    # answerCall()
 
-    
-    def do_reject(self, operatorID):
+    def rejectCall(self, operatorID):
         """
-        I deal with the reject command
-
-        :param ID: reject identification
-        :type  ID: int
+        Find the operator and make him answer a call
+        
+        :param operatorID: operator identification
+        :type  operatorID: string
 
         :return: nothing
         :rtype : none
         """
-        
         op = self.findOperator(operatorID)
         if op is None:
-            return 
+            return
+        
+        if op.hasCall():
+            callID = op.callID
+            # append the call id in the first position
+            self.waitingQueue = [callID] + self.waitingQueue
+            op.reject()
+            self.deliverCall()
+    # rejectCall()
 
-        if op.isRinging():
-            print('Call ' + str(op.callID) +
-                  ' rejected by operator ' + str(op.ID))
-            op.setStatus(operatorCall.AVAILABLE)
-            self.deliverNextCall(op)
-    # do_reject()
-    
-    def do_hangup(self, callID):
+    def hangupCall(self, callID):
         """
-        I Handle the hangup command
-
+        Get the call and ends it
+ 
         :param callID: call identification
         :type  callID: int
+        """
 
-        :return: nothing
-        :rtype : none
-        """
-        print('Hangup : ' + str(callID))
-    # do_hangup()
-    
-    def do_EOF(self, line):
-        """
-        I handle the end of file command
+        # Call is with an operator
+        for op in self.operators.values():
+            if op.callID == callID:
+                if op.status == operatorCall.RINGING:
+                    print('Call ' + callID + ' missed')
+                    op.setStatus(operatorCall.AVAILABLE)
+                else:
+                    op.hangup()
+                
+                self.deliverCall()
+                return
+            
+        # Call is the waiting queue
+        if self.waitingQueue.__len__() > 0:
+            self.waitingQueue.remove(callID)
+            print('Call ' + callID + ' missed')
+    # hangoutCall()
 
-        :return: always returns true
-        :rtype : boolean
+
+    def stopProgram(self):
         """
-        return True
-    # do_EOF()
+        Stop all the threads in self.operatorsThread
+        """
+        for opThread in self.operatorsThread.values():
+            opThread.stopThread()
+    # stopProgram()
 # CallCenter()
-
-if __name__ == '__main__':
-    CallCenter().cmdloop()
